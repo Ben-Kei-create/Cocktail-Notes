@@ -11,6 +11,20 @@ interface CocktailImageProps {
   style?: React.CSSProperties;
 }
 
+const thumbCache = new Map<number, Promise<string | null>>();
+
+function fetchThumb(id: number): Promise<string | null> {
+  let p = thumbCache.get(id);
+  if (!p) {
+    p = fetch(`https://www.thecocktaildb.com/api/json/v1/1/lookup.php?i=${id}`)
+      .then((r) => r.json())
+      .then((d) => (d?.drinks?.[0]?.strDrinkThumb as string | undefined) ?? null)
+      .catch(() => null);
+    thumbCache.set(id, p);
+  }
+  return p;
+}
+
 const SIZES = {
   sm: { width: 40, height: 40, borderRadius: "10px" },
   md: { width: 48, height: 48, borderRadius: "12px" },
@@ -29,16 +43,22 @@ export default function CocktailImage({
   const dim = SIZES[size];
 
   useEffect(() => {
+    let cancelled = false;
     const custom = getCustomImage(cocktailId);
     if (custom) {
       setImgSrc(custom);
       setImgError(false);
     } else if (thecocktaildbId) {
-      setImgSrc(`/api/cocktail-image/${thecocktaildbId}`);
       setImgError(false);
+      fetchThumb(thecocktaildbId).then((url) => {
+        if (!cancelled) setImgSrc(url);
+      });
     } else {
       setImgSrc(null);
     }
+    return () => {
+      cancelled = true;
+    };
   }, [cocktailId, thecocktaildbId]);
 
   const containerStyle: React.CSSProperties = {
